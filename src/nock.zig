@@ -148,18 +148,20 @@ pub const Runtime = struct {
     const NockError = error{
         HaxZero,
         SlotZero,
+        ArgumentMustBeCell,
+        FormulaMustBeCell,
         UnnamedError,
     };
     const NockInnerError = NockError || Allocator.Error;
     pub fn nock(self: Runtime, n: *Noun) NockInnerError!*Noun {
         if (n.* != NounTag.cell) {
-            return NockError.UnnamedError;
+            return NockError.ArgumentMustBeCell;
         }
         const subj = n.cell.head;
         const form = n.cell.tail;
 
         if (form.* != NounTag.cell) {
-            return NockError.UnnamedError;
+            return NockError.FormulaMustBeCell;
         }
         if (form.cell.head.* == NounTag.cell) { //      *[a [b c] d]            [*[a b c] *[a d]]
             const a1 = try self.createCopy(subj);

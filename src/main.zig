@@ -8,16 +8,18 @@ fn infVar(v: anytype) void {
 pub fn main() !u8 {
     const stdout = std.io.getStdOut().writer();
 
-    var boss = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = boss.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    var args = std.process.args();
+    var args = try std.process.argsWithAllocator(allocator);
+    defer args.deinit();
 
-    var str: [*:0]u8 = undefined;
+    var str: [:0]const u8 = undefined;
 
     var argc: usize = 0;
-    while (args.next(allocator)) |arg| : (argc += 1) {
-        str = try arg;
+    while (args.next()) |arg| : (argc += 1) {
+        str = arg;
     }
 
     if (argc < 2) {
@@ -39,9 +41,9 @@ fn compute(rt: nock.Runtime, str: [*:0]const u8) !u8 {
     try nock.printNoun(n.*, stdout);
     try stdout.print(", gives\n", .{});
     const r = try rt.nock(n);
+    defer rt.destroyNoun(r);
     try nock.printNoun(r.*, stdout);
     try stdout.print("\n", .{});
-    rt.destroyNoun(r);
     return 0;
 }
 
@@ -49,9 +51,9 @@ fn parseOnly(rt: nock.Runtime, str: [*:0]const u8) !u8 {
     const stdout = std.io.getStdOut().writer();
     try stdout.print("\n{s}, is\n", .{str});
     const n = try rt.readNoun(str);
+    defer rt.destroyNoun(n);
     try nock.printNoun(n.*, stdout);
     try stdout.print("\n", .{});
-    rt.destroyNoun(n);
     return 0;
 }
 
