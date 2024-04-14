@@ -121,6 +121,24 @@ pub const Runtime = struct {
         return ret;
     }
 
+    pub fn createCellOfAtoms(self: Runtime, head: u32, tail: u32) !*Noun {
+        const ret = try self.allocator.create(Noun);
+        ret.* = Noun{ .cell = .{ .head = try self.createAtom(head), .tail = try self.createAtom(tail) } };
+        return ret;
+    }
+
+    pub fn createList(self: Runtime, list: []const *Noun) !*Noun {
+        if (list.len > 1) {
+            const ret = try self.allocator.create(Noun);
+            ret.* = Noun{ .cell = .{ .head = list[0], .tail = try self.createList(list[1..]) } };
+            return ret;
+        } else if (list.len == 1) {
+            return self.createCopy(list[0]);
+        } else {
+            return NockError.EmptySourceList;
+        }
+    }
+
     pub fn createCopy(self: Runtime, noun: *Noun) Allocator.Error!*Noun {
         switch (noun.*) {
             NounTag.atom => {
@@ -148,8 +166,13 @@ pub const Runtime = struct {
     const NockError = error{
         HaxZero,
         SlotZero,
+
         ArgumentMustBeCell,
         FormulaMustBeCell,
+        FormulaTailMustBeCellFor11,
+
+        EmptySourceList,
+
         UnnamedError,
     };
     const NockInnerError = NockError || Allocator.Error;
@@ -162,8 +185,8 @@ pub const Runtime = struct {
 
         if (form.* != NounTag.cell) {
             return NockError.FormulaMustBeCell;
-        }
-        if (form.cell.head.* == NounTag.cell) { //      *[a [b c] d]            [*[a b c] *[a d]]
+        } else if (form.cell.head.* == NounTag.cell) {
+            //      *[a [b c] d]            [*[a b c] *[a d]]
             const a1 = try self.createCopy(subj);
             const a2 = try self.createCopy(subj);
             const b = try self.createCopy(form.cell.head.cell.head);
@@ -172,13 +195,11 @@ pub const Runtime = struct {
             self.destroyNoun(n);
             // zig fmt: off
             return self.createCell(
-                try self.nock(try self.createCell(
+                try self.nock(try self.createList(&[_]*Noun{
                     a1,
-                    try self.createCell(
-                        b,
-                        c,
-                    ),
-                )),
+                    b,
+                    c,
+                })),
                 try self.nock(try self.createCell(
                     a2,
                     d,
@@ -188,18 +209,18 @@ pub const Runtime = struct {
         }
 
         switch (form.cell.head.atom) {
-            0 => { //      *[a 0 b]                 /[b a]
+            0 => {  //      *[a 0 b]                 /[b a]
                 const a = try self.createCopy(subj);
                 const b = try self.createCopy(form.cell.tail);
                 self.destroyNoun(n);
                 return self.slot(try self.createCell(b, a));
             },
-            1 => { //      *[a 1 b]                 b
+            1 => {  //      *[a 1 b]                 b
                 const b = try self.createCopy(form.cell.tail);
                 self.destroyNoun(n);
                 return b;
             },
-            2 => { //      *[a 2 b c]               *[*[a b] *[a c]]
+            2 => {  //      *[a 2 b c]               *[*[a b] *[a c]]
                 const a1 = try self.createCopy(subj);
                 const a2 = try self.createCopy(subj);
                 const b = try self.createCopy(form.cell.tail.cell.head);
@@ -218,19 +239,19 @@ pub const Runtime = struct {
                 ));
                 // zig fmt: on
             },
-            3 => { //      *[a 3 b]                 ?*[a b]
+            3 => {  //      *[a 3 b]                 ?*[a b]
                 const a = try self.createCopy(subj);
                 const b = try self.createCopy(form.cell.tail);
                 self.destroyNoun(n);
                 return self.wut(try self.nock(try self.createCell(a, b)));
             },
-            4 => { //      *[a 4 b]                 +*[a b]
+            4 => {  //      *[a 4 b]                 +*[a b]
                 const a = try self.createCopy(subj);
                 const b = try self.createCopy(form.cell.tail);
                 self.destroyNoun(n);
                 return self.lus(try self.nock(try self.createCell(a, b)));
             },
-            5 => { //      *[a 5 b c]               =[*[a b] *[a c]]
+            5 => {  //      *[a 5 b c]               =[*[a b] *[a c]]
                 const a1 = try self.createCopy(subj);
                 const a2 = try self.createCopy(subj);
                 const b = try self.createCopy(form.cell.tail.cell.head);
@@ -247,6 +268,79 @@ pub const Runtime = struct {
                         c,
                     )),
                 ));
+                // zig fmt: on
+            },
+            6 => {  //      *[a 6 b c d]            *[a *[[c d] 0 *[[2 3] 0 *[a 4 4 b]]]]
+                const a1 = try self.createCopy(subj);
+                const a2 = try self.createCopy(subj);
+                const b = try self.createCopy(form.cell.tail.cell.head);
+                const c = try self.createCopy(form.cell.tail.cell.tail.cell.head);
+                const d = try self.createCopy(form.cell.tail.cell.tail.cell.tail);
+                self.destroyNoun(n);
+                // zig fmt: off
+                return try self.nock(try self.createCell(
+                    a1,
+                    try self.nock(try self.createList(&[_]*Noun{
+                        try self.createCell(c, d),
+                        try self.createAtom(0),
+                        try self.nock(try self.createList(&[_]*Noun{
+                            try self.createCellOfAtoms(2, 3),
+                            try self.createAtom(0),
+                            try self.nock(try self.createList(&[_]*Noun{
+                                a2,
+                                try self.createAtom(4),
+                                try self.createAtom(4),
+                                b,
+                            })),
+                        })),
+                    }))
+                ));
+                // zig fmt: on
+            },
+            7 => {  //      *[a 7 b c]              *[*[a b] c]
+                const a = try self.createCopy(subj);
+                const b = try self.createCopy(form.cell.tail.cell.head);
+                const c = try self.createCopy(form.cell.tail.cell.tail);
+                self.destroyNoun(n);
+                // zig fmt: off
+                return try self.nock(try self.createCell(
+                    try self.nock(try self.createCell(a, b)),
+                    c
+                ));
+                // zig fmt: on
+            },
+            8 => {  //      *[a 8 b c]              *[[*[a b] a] c]
+                const a1 = try self.createCopy(subj);
+                const a2 = try self.createCopy(subj);
+                const b = try self.createCopy(form.cell.tail.cell.head);
+                const c = try self.createCopy(form.cell.tail.cell.tail);
+                self.destroyNoun(n);
+                // zig fmt: off
+                return try self.nock(try self.createCell(
+                    try self.createCell(
+                        try self.nock(try self.createCell(
+                            a1,
+                            b
+                        )),
+                        a2
+                    ),
+                    c
+                ));
+                // zig fmt: on
+            },
+            9 => {  //      *[a 9 b c]              *[*[a c] 2 [0 1] 0 b]
+                const a = try self.createCopy(subj);
+                const b = try self.createCopy(form.cell.tail.cell.head);
+                const c = try self.createCopy(form.cell.tail.cell.tail);
+                self.destroyNoun(n);
+                // zig fmt: off
+                return try self.nock(try self.createList(&[_]*Noun{
+                    try self.nock(try self.createCell(a, c)),
+                    try self.createAtom(2),
+                    try self.createCellOfAtoms(0, 1),
+                    try self.createAtom(0),
+                    b
+                }));
                 // zig fmt: on
             },
             10 => { //      *[a 10 [b c] d]         #[b *[a c] *[a d]]
@@ -271,6 +365,34 @@ pub const Runtime = struct {
                     ),
                 ));
                 // zig fmt: on
+            },
+            11 => {
+                if (form.cell.tail.* == NounTag.cell) {
+                    return NockError.FormulaTailMustBeCellFor11;
+                } else if(form.cell.tail.cell.head.* == NounTag.cell) {
+                    //      *[a 11 [b c] d]         *[[*[a c] *[a d]] 0 3]
+                    const a1 = try self.createCopy(subj);
+                    const a2 = try self.createCopy(subj);
+                    const c = try self.createCopy(form.cell.tail.cell.head.cell.tail);
+                    const d = try self.createCopy(form.cell.tail.cell.tail);
+                    self.destroyNoun(n);
+                    // zig fmt: off
+                    return try self.nock(try self.createList(&[_]*Noun{
+                        try self.createCell(
+                            try self.nock(try self.createCell(a1, c)),
+                            try self.nock(try self.createCell(a2, d))
+                        ),
+                        try self.createAtom(0),
+                        try self.createAtom(3),
+                    }));
+                    // zig fmt: on
+                } else {
+                    //      *[a 11 b c]             *[a c]
+                    const a = try self.createCopy(subj);
+                    const c = try self.createCopy(form.cell.tail.cell.tail);
+                    self.destroyNoun(n);
+                    return try self.nock(try self.createCell(a, c));
+                }
             },
             else => {
                 return n;

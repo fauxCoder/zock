@@ -1,12 +1,8 @@
 const std = @import("std");
 const nock = @import("nock.zig");
 
-fn infVar(v: anytype) void {
-    std.debug.print("typeName: {s}\n", .{@typeName(@TypeOf(v))});
-}
-
 pub fn main() !u8 {
-    const stdout = std.io.getStdOut().writer();
+    const cerr = std.io.getStdErr().writer();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -23,10 +19,10 @@ pub fn main() !u8 {
     }
 
     if (argc < 2) {
-        try stdout.print("Please provide noun.\n", .{});
+        try cerr.print("Please provide noun.\n", .{});
         return 1;
     } else if (argc > 2) {
-        try stdout.print("Too many arguments. Perhaps you need to wrap in \"\"?\n", .{});
+        try cerr.print("Too many arguments. Perhaps you need to wrap in \"\"?\n", .{});
         return 1;
     }
 
@@ -35,25 +31,25 @@ pub fn main() !u8 {
 }
 
 fn compute(rt: nock.Runtime, str: [*:0]const u8) !u8 {
-    const stdout = std.io.getStdOut().writer();
+    const cerr = std.io.getStdErr().writer();
     const n = try rt.readNoun(str);
-    try stdout.print("\n", .{});
-    try nock.printNoun(n.*, stdout);
-    try stdout.print(", gives\n", .{});
+    try cerr.print("\n", .{});
+    try nock.printNoun(n.*, cerr);
+    try cerr.print(", gives\n", .{});
     const r = try rt.nock(n);
     defer rt.destroyNoun(r);
-    try nock.printNoun(r.*, stdout);
-    try stdout.print("\n", .{});
+    try nock.printNoun(r.*, cerr);
+    try cerr.print("\n", .{});
     return 0;
 }
 
 fn parseOnly(rt: nock.Runtime, str: [*:0]const u8) !u8 {
-    const stdout = std.io.getStdOut().writer();
-    try stdout.print("\n{s}, is\n", .{str});
+    const cerr = std.io.getStdErr().writer();
+    try cerr.print("\n{s}, is\n", .{str});
     const n = try rt.readNoun(str);
     defer rt.destroyNoun(n);
-    try nock.printNoun(n.*, stdout);
-    try stdout.print("\n", .{});
+    try nock.printNoun(n.*, cerr);
+    try cerr.print("\n", .{});
     return 0;
 }
 
